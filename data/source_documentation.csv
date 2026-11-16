@@ -1,0 +1,6 @@
+input,source,date,method_note
+spot,Demonstration data,2026-10-16,Replace with a documented market source
+market_bid_ask,Demonstration data,2026-10-16,Replace with same-contract quote
+volatility,Demonstration data,2026-10-16,Replace with documented implied or historical volatility
+risk_free_rate,Demonstration data,2026-10-16,Replace with matched-maturity source
+analyst_targets,Demonstration data,2026-10-16,Replace with individual reports using one horizon
