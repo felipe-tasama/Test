@@ -1,6 +1,10 @@
 input,source,date,method_note
-spot,Demonstration data,2026-10-16,Replace with a documented market source
-market_bid_ask,Demonstration data,2026-10-16,Replace with same-contract quote
-volatility,Demonstration data,2026-10-16,Replace with documented implied or historical volatility
-risk_free_rate,Demonstration data,2026-10-16,Replace with matched-maturity source
-analyst_targets,Demonstration data,2026-10-16,Replace with individual reports using one horizon
+spot,https://www.optionistics.com/quotes/option-prices?optsym=KO++++270917C00095000,2026-11-19,KO underlying close of $96.09 from the same dated history row as the contract quote.
+option_contract,https://www.optionistics.com/quotes/option-prices?optsym=KO++++270917C00095000 | https://www.theocc.com/clearance-and-settlement/clearing/equity-options-product-specifications,2026-11-19,Standard American $95 call KO270917C00095000 expiring 2027-09-17; 100 shares; 302 calendar days on ACT/365.
+market_bid_ask,https://www.optionistics.com/quotes/option-prices?optsym=KO++++270917C00095000,2026-11-19,Bid $8.60; ask $10.55; midpoint $9.575 per share; volume 12; open interest 562. Spread is about 20.4% of midpoint.
+volatility,https://www.optionistics.com/quotes/option-prices?optsym=KO++++270917C00095000,2026-11-19,Contract-level vendor implied volatility 0.2214. Vendor IV derivation is not disclosed in this table.
+risk_free_rate,https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?field_tdr_date_value=2026&type=daily_treasury_yield_curve,2026-11-19,1-year Treasury par yield 4.62% used as a flat continuously compounded proxy for the 302-day term.
+dividend_yield,https://investors.coca-colacompany.com/filings-reports/all-sec-filings/content/0001628280-26-067844/ko-20261002.htm,2026-10-28,Annualize the latest declared $0.53 quarterly dividend to $2.12 and divide by the $96.09 quote-date close. Continuous yield approximates discrete cash dividends.
+dcf_value,Tasama_CocaCola_Integrated_Workbook.xlsx,2026-09-24,Prior base-case equity value $363857.95 million divided by 4313 million diluted shares. No roll-forward to the option quote date.
+comps_value,https://www.financecharts.com/stocks/PEP/value/peg-ratio | https://www.financecharts.com/compare/KDP/value/pe-ratio | https://www.financecharts.com/stocks/KO/value/pe-ratio-current-vs-avg,2026-11-19,"Two-peer median TTM diluted P/E: PEP 17.46x and KDP 31.57x, giving 24.515x. Multiply by KO TTM diluted EPS $3.40 for $83.351. Business mix and GAAP EPS comparability limit the benchmark."
+analyst_targets,https://www.tipranks.com/stocks/ko/forecast | https://www.google.com/finance/quote/KO%3ANYSE?window=5D,2026-11-19,One latest numeric target per covered firm in the documented sample. Twelve months is the provider convention; individual broker horizons are not independently verified. The option expires before these target horizons.
