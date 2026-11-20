@@ -34,6 +34,93 @@ def crr(spot,strike,T,r,sigma,N,q=0,kind='call',american=False,tree_steps=3):
 def price_only(m, **changes):
     x={**m,**changes}; return crr(x['spot'],x['strike'],x['maturity_years'],x['risk_free_rate'],x['volatility'],x['lattice_steps'],x['dividend_yield'],x['option_type'],x['exercise_style']=='american')['price']
 
+def greek_analysis(m):
+    """Measure local risk in dollars per option share unless otherwise stated."""
+    S, T = m['spot'], m['maturity_years']
+    K, r, q, sigma = (m[k] for k in ('strike', 'risk_free_rate', 'dividend_yield', 'volatility'))
+    n = m['lattice_steps']
+    american = m['exercise_style'] == 'american'
+
+    def price(**changes):
+        return price_only(m, **changes)
+
+    def derivatives(spot):
+        # Recover the first two levels of the original lattice with subtrees.
+        dt = T / n
+        u = np.exp(sigma * np.sqrt(dt))
+        d = 1 / u
+
+        def node(level, ups):
+            stock = spot * u**ups * d**(level-ups)
+            return stock, price(spot=stock, maturity_years=T-level*dt, lattice_steps=n-level)
+
+        sl, vl = node(1, 0)
+        sh, vh = node(1, 1)
+        s0, v0 = node(2, 0)
+        s1, v1 = node(2, 1)
+        s2, v2 = node(2, 2)
+        return (vh-vl)/(sh-sl), 2*((v2-v1)/(s2-s1)-(v1-v0)/(s1-s0))/(s2-s0), (v1-price(spot=spot))/(2*dt*365)
+
+    def slope(key, center, h, **changes):
+        return (price(**(changes | {key: center+h}))-price(**(changes | {key: center-h})))/(2*h)
+
+    def richardson(key, center, h, **changes):
+        return (4*slope(key, center, h/2, **changes)-slope(key, center, h, **changes))/3
+
+    delta, gamma, theta = derivatives(S)
+    vega = richardson('volatility', sigma, .005)*.01
+    rho = richardson('risk_free_rate', r, .001)*.01
+    greeks = dict(delta=delta, gamma=gamma, vega_1pct=vega, theta_1day=theta, rho_1pct=rho)
+    base = price()
+
+    def fd(h):
+        up, dn = price(spot=S+h), price(spot=S-h)
+        return (up-dn)/(2*h), (up-2*base+dn)/h**2
+
+    h = S*.02
+    delta_fd, gamma_fd = fd(h)
+    delta_alt, gamma_alt = fd(h*1.5)
+    day = 1/365
+    checks = [
+        ('Delta', delta, delta_fd, delta_alt, h, h*1.5, 'option $ per stock $'),
+        ('Gamma', gamma, gamma_fd, gamma_alt, h, h*1.5, 'delta change per stock $'),
+        ('Vega', vega, slope('volatility',sigma,.01)*.01, slope('volatility',sigma,.005)*.01, .01, .005, 'option $ per +1 volatility point'),
+        ('Theta', theta, price(maturity_years=T-day)-base, (price(maturity_years=T-2*day)-base)/2, day, 2*day, 'option $ per calendar day elapsed'),
+        ('Rho', rho, slope('risk_free_rate',r,.002)*.01, slope('risk_free_rate',r,.001)*.01, .002, .001, 'option $ per +1 rate point'),
+    ]
+    rows = [dict(greek=name, primary=a, finite_difference=b, alternative=c, bump=x,
+                 alternative_bump=y, difference=a-b, units=units)
+            for name,a,b,c,x,y,units in checks]
+    ds, dv, dr, elapsed = 1, .01, .001, 1
+    stock_reprice = price(spot=S+ds)-base
+    combined_reprice = price(spot=S+ds, volatility=sigma+dv, risk_free_rate=r+dr,
+                             maturity_years=T-elapsed/365)-base
+    linear = delta*ds
+    curved = linear + .5*gamma*ds**2
+    combined = curved + vega*dv/.01 + theta*elapsed + rho*dr/.01
+    repricing = [dict(method=name, estimate=estimate, full_reprice=actual, error=estimate-actual)
+                 for name,estimate,actual in [('Delta only',linear,stock_reprice),
+                 ('Delta and gamma',curved,stock_reprice),('Combined',combined,combined_reprice)]]
+    single_factor = [
+        dict(shock='Volatility +1 point',estimate=vega,actual=price(volatility=sigma+dv)-base),
+        dict(shock='One calendar day elapsed',estimate=theta,actual=price(maturity_years=T-day)-base),
+        dict(shock='Rate +10 basis points',estimate=rho*.1,actual=price(risk_free_rate=r+dr)-base),
+    ]
+    curve = []
+    for stock in np.linspace(.75*min(S,K), 1.25*max(S,K), 61):
+        de, ga, th = derivatives(float(stock))
+        ve = richardson('volatility', sigma, .005, spot=float(stock))*.01
+        curve.append(dict(spot=stock, delta=de, gamma=ga, vega_1pct=ve, theta_1day=th))
+    euro = price(exercise_style='european')
+    lo = max(S-K, 0) if m['option_type']=='call' else max(K-S, 0)
+    hi = S if m['option_type']=='call' else K
+    return dict(greeks=greeks, greek_validation=rows, repricing=repricing,
+                single_factor=single_factor, greek_curve=curve, european_price=euro,
+                exercise_premium=base-euro, american_bounds_pass=not american or lo <= base <= hi,
+                delta_check=bool(0 <= delta <= 1 if m['option_type']=='call' else -1 <= delta <= 0),
+                gamma_check=bool(gamma >= -1e-10))
+
+
 def build_results(data=DATA):
     inp=pd.read_csv(data/'company_inputs.csv'); targets=pd.read_csv(data/'analyst_targets.csv'); sources=pd.read_csv(data/'source_documentation.csv')
     if len(inp)!=1: raise ValueError('company_inputs.csv must contain exactly one row.')
@@ -55,12 +142,10 @@ def build_results(data=DATA):
     steps=[25,50,100,200,500]; conv=[price_only(m,lattice_steps=n) for n in steps]
     pvs=m['spot']*np.exp(-m['dividend_yield']*m['maturity_years']); pvk=m['strike']*np.exp(-m['risk_free_rate']*m['maturity_years']); lo,hi=(max(pvs-pvk,0),pvs) if m['option_type']=='call' else (max(pvk-pvs,0),pvk)
     call=crr(m['spot'],m['strike'],m['maturity_years'],m['risk_free_rate'],m['volatility'],m['lattice_steps'],m['dividend_yield'],'call')['price']; put=crr(m['spot'],m['strike'],m['maturity_years'],m['risk_free_rate'],m['volatility'],m['lattice_steps'],m['dividend_yield'],'put')['price']; parity=float((call-put)-(pvs-pvk))
-    bumps={'spot':max(.01*m['spot'],.01),'volatility':.01,'risk_free_rate':.001,'maturity_years':1/365}
-    up=price_only(m,spot=m['spot']+bumps['spot']); dn=price_only(m,spot=max(.01,m['spot']-bumps['spot'])); base=lattice['price']
-    greeks={'delta':(up-dn)/(2*bumps['spot']),'gamma':(up-2*base+dn)/bumps['spot']**2,'vega_1pct':(price_only(m,volatility=m['volatility']+.01)-price_only(m,volatility=max(.001,m['volatility']-.01)))/2,'rho_10bp':(price_only(m,risk_free_rate=m['risk_free_rate']+.001)-price_only(m,risk_free_rate=m['risk_free_rate']-.001))/2,'theta_1day':price_only(m,maturity_years=max(1/365,m['maturity_years']-1/365))-base}
+    base=lattice['price']
     sigmas=np.linspace(max(.05,m['volatility']-.15),m['volatility']+.15,25); sensitivity=[{'volatility':float(x),'price':price_only(m,volatility=float(x))} for x in sigmas]
     spread=m['market_ask']-m['market_bid']; status='Inside spread' if m['market_bid']<=base<=m['market_ask'] else ('Below bid' if base<m['market_bid'] else 'Above ask')
-    return {'model':m,'analyst_targets':[float(x) for x in targets.target],'analyst_stats':stats,'valuation':{'Current market':m['spot'],'Comparable companies':m['comps_value'],'Student DCF':m['dcf_value'],'Analyst median':stats['median']},'states':states.to_dict('records'),'valuation_weighted_expected_payoff':belief,'belief_decomposition':{'weight_zero_payoff':float(states.loc[states.option_payoff==0,'subjective_weight'].sum()),'weight_positive_payoff':float(states.loc[states.option_payoff>0,'subjective_weight'].sum()),'weighted_terminal_payoff':float(states.weighted_payoff.sum()),'discount_factor':df},'lattice':lattice,'greeks':greeks,'validation':{'valid_risk_neutral_probability':bool(0<lattice['p_star']<1),'inside_theoretical_bounds':bool(lo<=base<=hi),'put_call_parity_pass':bool(abs(parity)<.05) if m['exercise_style']=='european' else None,'parity_residual':parity,'convergence_pass':bool(abs(conv[-1]-conv[-2])<.05),'convergence_gap':conv[-1]-conv[-2],'lower_bound':lo,'upper_bound':hi},'convergence':[{'steps':n,'price':float(x)} for n,x in zip(steps,conv)],'comparison':{'Analyst scenario':belief,'CRR lattice':base,'Market midpoint':m['market_mid']},'market_comparison':{'model_minus_mid':base-m['market_mid'],'model_minus_mid_pct':(base/m['market_mid']-1) if m['market_mid'] else None,'spread':spread,'spread_pct':spread/m['market_mid'] if m['market_mid'] else None,'status':status},'sensitivity':sensitivity,'analyst_horizon_years':float(targets.horizon_months.iloc[0])/12,'sources':sources.to_dict('records')}
+    return {'model':m,'analyst_targets':[float(x) for x in targets.target],'analyst_stats':stats,'valuation':{'Current market':m['spot'],'Comparable companies':m['comps_value'],'Student DCF':m['dcf_value'],'Analyst median':stats['median']},'states':states.to_dict('records'),'valuation_weighted_expected_payoff':belief,'belief_decomposition':{'weight_zero_payoff':float(states.loc[states.option_payoff==0,'subjective_weight'].sum()),'weight_positive_payoff':float(states.loc[states.option_payoff>0,'subjective_weight'].sum()),'weighted_terminal_payoff':float(states.weighted_payoff.sum()),'discount_factor':df},'lattice':lattice,**greek_analysis(m),'validation':{'valid_risk_neutral_probability':bool(0<lattice['p_star']<1),'inside_theoretical_bounds':bool(lo<=base<=hi),'put_call_parity_pass':bool(abs(parity)<.05) if m['exercise_style']=='european' else None,'parity_residual':parity,'convergence_pass':bool(abs(conv[-1]-conv[-2])<.05),'convergence_gap':conv[-1]-conv[-2],'lower_bound':lo,'upper_bound':hi},'convergence':[{'steps':n,'price':float(x)} for n,x in zip(steps,conv)],'comparison':{'Analyst scenario':belief,'CRR lattice':base,'Market midpoint':m['market_mid']},'market_comparison':{'model_minus_mid':base-m['market_mid'],'model_minus_mid_pct':(base/m['market_mid']-1) if m['market_mid'] else None,'spread':spread,'spread_pct':spread/m['market_mid'] if m['market_mid'] else None,'status':status},'sensitivity':sensitivity,'analyst_horizon_years':float(targets.horizon_months.iloc[0])/12,'sources':sources.to_dict('records')}
 
 if __name__=='__main__':
     DOCS.mkdir(exist_ok=True); out=build_results(); (DOCS/'model_results.json').write_text(json.dumps(out,indent=2)); print('Exported docs/model_results.json')
