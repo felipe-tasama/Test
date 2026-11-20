@@ -1,16 +1,12 @@
-source,publication_date,horizon_months,target
-Analyst 1,2026-10-01,12,82
-Analyst 2,2026-10-02,12,88
-Analyst 3,2026-10-03,12,91
-Analyst 4,2026-10-04,12,94
-Analyst 5,2026-10-05,12,96
-Analyst 6,2026-10-06,12,98
-Analyst 7,2026-10-07,12,100
-Analyst 8,2026-10-08,12,101
-Analyst 9,2026-10-09,12,103
-Analyst 10,2026-10-10,12,105
-Analyst 11,2026-10-11,12,108
-Analyst 12,2026-10-12,12,110
-Analyst 13,2026-10-13,12,114
-Analyst 14,2026-10-14,12,118
-Analyst 15,2026-10-15,12,126
+source,publication_date,horizon_months,target,source_url
+Evercore ISI - Robert Ottenstein,2026-11-18,12,100,https://www.tipranks.com/stocks/ko/forecast
+TD Cowen - Robert Moskow,2026-11-17,12,112,https://www.tipranks.com/stocks/ko/forecast
+Bernstein - Cristian Rios,2026-11-13,12,95,https://www.tipranks.com/stocks/ko/forecast
+RBC Capital - Nik Modi,2026-10-28,12,96,https://www.tipranks.com/stocks/ko/forecast
+Piper Sandler - Michael Lavery,2026-10-28,12,103,https://www.tipranks.com/stocks/ko/forecast
+JPMorgan - Andrea Faria Teixeira,2026-10-28,12,98,https://www.tipranks.com/stocks/ko/forecast
+Morgan Stanley - Dara Mohsenian,2026-10-28,12,103,https://www.tipranks.com/stocks/ko/forecast
+Citi - Filippo Falorni,2026-10-28,12,103,https://www.tipranks.com/stocks/ko/forecast
+UBS - Peter Grom,2026-10-28,12,106,https://www.tipranks.com/stocks/ko/forecast
+Freedom Broker - Georgy Vashchenko,2026-10-28,12,89,https://www.tipranks.com/stocks/ko/forecast
+Barclays - Lauren Lieberman,2026-10-27,12,98,https://www.tipranks.com/stocks/ko/forecast
